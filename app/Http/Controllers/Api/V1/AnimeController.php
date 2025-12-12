@@ -1,106 +1,115 @@
 <?php
 
-namespace App\Http\Controllers\Api\V1;
+namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\Api\V1\AnimeCollection;
-use App\Http\Resources\Api\V1\AnimeResource;
-use App\Models\Anime;
-use Illuminate\Http\Request;
+use App\Http\Resources\AnimeResource;
 use App\Http\Resources\EpisodeResource;
+use App\Models\Anime;
 use App\Models\Episode;
+use Illuminate\Http\Request;
 
 class AnimeController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Anime::with('tags');
+        $query = Anime::with(['genres', 'studios']);
 
-        if ($request->has('search')) {
-            $query->where('title', 'ILIKE', '%' . $request->search . '%');
+        if ($request->has('type')) {
+            $query->where('type', $request->type);
         }
 
         if ($request->has('status')) {
             $query->where('status', $request->status);
         }
 
-        if ($request->has('type')) {
-            $query->where('type', $request->type);
-        }
-
-        if ($request->has('year')) {
-            $query->where('year', $request->year);
-        }
-
-        if ($request->has('tag')) {
-            $query->whereHas('tags', function ($q) use ($request) {
-                $q->where('slug', $request->tag);
+        if ($request->has('genre')) {
+            $query->whereHas('genres', function ($q) use ($request) {
+                $q->where('slug', $request->genre);
             });
         }
 
-        if ($request->has('nsfw')) {
-            $query->where('nsfw_flag', filter_var($request->nsfw, FILTER_VALIDATE_BOOLEAN));
+        if ($request->has('studio')) {
+            $query->whereHas('studios', function ($q) use ($request) {
+                $q->where('slug', $request->studio);
+            });
+        }
+
+        if ($request->has('year')) {
+            $query->whereYear('aired_from', $request->year);
+        }
+
+        if ($request->has('search')) {
+            $query->where(function ($q) use ($request) {
+                $q->where('title', 'like', "%{$request->search}%")
+                  ->orWhere('title_english', 'like', "%{$request->search}%")
+                  ->orWhere('title_japanese', 'like', "%{$request->search}%");
+            });
+        }
+
+        if ($request->has('sort')) {
+            switch ($request->sort) {
+                case 'rating':
+                    $query->orderByDesc('rating');
+                    break;
+                case 'popularity':
+                    $query->orderByDesc('popularity');
+                    break;
+                case 'newest':
+                    $query->orderByDesc('aired_from');
+                    break;
+                default:
+                    $query->orderByDesc('created_at');
+            }
         } else {
-            $query->where('nsfw_flag', false);
+            $query->orderByDesc('created_at');
         }
 
-        $sortBy = $request->get('sort_by', 'created_at');
-        $sortOrder = $request->get('sort_order', 'desc');
+        $anime = $query->paginate(20);
 
-        $validSortColumns = ['title', 'rating', 'year', 'popularity', 'favorites', 'created_at'];
-        if (in_array($sortBy, $validSortColumns)) {
-            $query->orderBy($sortBy, $sortOrder);
-        }
-
-        $perPage = min($request->get('per_page', 20), 100);
-
-        return new AnimeCollection(
-            $query->paginate($perPage)->appends($request->query())
-        );
+        return AnimeResource::collection($anime);
     }
 
-    public function show(string $slug)
+    public function show(Anime $anime)
     {
-        $anime = Anime::with('tags')->where('slug', $slug)->firstOrFail();
-
+        $anime->load(['genres', 'studios', 'tags']);
         return new AnimeResource($anime);
     }
+
     public function episodes(Anime $anime)
     {
         $episodes = $anime->episodes()
             ->orderBy('episode_number')
-            ->orderBy('translation_name')
+            ->orderBy('translator')
             ->paginate(50);
-    
+
         return EpisodeResource::collection($episodes);
     }
-    
+
     public function episode(Anime $anime, Episode $episode)
     {
         if ($episode->anime_id !== $anime->id) {
             abort(404, 'Episode not found for this anime');
         }
-    
+
         return new EpisodeResource($episode);
     }
-    
+
     public function genres()
     {
         $genres = \App\Models\Genre::withCount('anime')
             ->orderBy('name')
             ->get();
-    
+
         return response()->json($genres);
     }
-    
+
     public function studios()
     {
         $studios = \App\Models\Studio::withCount('anime')
             ->orderBy('name')
             ->get();
-    
+
         return response()->json($studios);
     }
-    
-
 }

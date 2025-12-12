@@ -1,0 +1,233 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "AniYume API",
+        "description": "REST API для AniYume - аниме платформы с поддержкой множественных озвучек",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8000/api",
+            "description": "Local API Server"
+        }
+    ],
+    "paths": {
+        "/v1/anime": {
+            "get": {
+                "tags": ["Anime"],
+                "summary": "Получить список аниме",
+                "description": "Получить список всех аниме с фильтрацией",
+                "parameters": [
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "Тип аниме (TV, Movie, OVA, Special, ONA)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": ["tv", "movie", "ova", "special", "ona"]
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "Статус (ongoing, completed, upcoming)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": ["ongoing", "finished", "upcoming"]
+                        }
+                    },
+                    {
+                        "name": "genre",
+                        "in": "query",
+                        "description": "Slug жанра",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "studio",
+                        "in": "query",
+                        "description": "Slug студии",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "year",
+                        "in": "query",
+                        "description": "Год выхода",
+                        "required": false,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "search",
+                        "in": "query",
+                        "description": "Поиск по названию",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "sort",
+                        "in": "query",
+                        "description": "Сортировка",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": ["rating", "popularity", "newest"]
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Номер страницы",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Успешный ответ"
+                    }
+                }
+            }
+        },
+        "/v1/anime/{id}": {
+            "get": {
+                "tags": ["Anime"],
+                "summary": "Получить детали аниме",
+                "description": "Получить подробную информацию об аниме по ID",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID аниме",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Успешный ответ"
+                    },
+                    "404": {
+                        "description": "Аниме не найдено"
+                    }
+                }
+            }
+        },
+        "/v1/anime/{id}/episodes": {
+            "get": {
+                "tags": ["Episodes"],
+                "summary": "Получить эпизоды аниме",
+                "description": "Получить все эпизоды с озвучками для конкретного аниме",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID аниме",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "Номер страницы",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список эпизодов с озвучками"
+                    }
+                }
+            }
+        },
+        "/v1/anime/{anime_id}/episodes/{episode_id}": {
+            "get": {
+                "tags": ["Episodes"],
+                "summary": "Получить конкретный эпизод",
+                "description": "Получить информацию о конкретном эпизоде",
+                "parameters": [
+                    {
+                        "name": "anime_id",
+                        "in": "path",
+                        "description": "ID аниме",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "episode_id",
+                        "in": "path",
+                        "description": "ID эпизода",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Данные эпизода"
+                    },
+                    "404": {
+                        "description": "Эпизод не найден"
+                    }
+                }
+            }
+        },
+        "/v1/genres": {
+            "get": {
+                "tags": ["Genres"],
+                "summary": "Получить список жанров",
+                "description": "Получить все жанры с количеством аниме",
+                "responses": {
+                    "200": {
+                        "description": "Список жанров"
+                    }
+                }
+            }
+        },
+        "/v1/studios": {
+            "get": {
+                "tags": ["Studios"],
+                "summary": "Получить список студий",
+                "description": "Получить все студии с количеством аниме",
+                "responses": {
+                    "200": {
+                        "description": "Список студий"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            }
+        }
+    }
+}

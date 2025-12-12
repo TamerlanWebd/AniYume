@@ -73,7 +73,6 @@ class ImportEpisodesCommand extends Command
             $this->processAnime($anime, $kodikService);
             $progressBar->advance();
             
-            // Rate limiting: задержка между запросами
             sleep(2);
         }
 
@@ -84,34 +83,50 @@ class ImportEpisodesCommand extends Command
     private function processAnime(Anime $anime, KodikService $kodikService): void
     {
         try {
-            $kodikData = $kodikService->searchByShikimoriId($anime->shikimori_id);
-
+            $this->info("Searching for: {$anime->title}");
+            $kodikData = $kodikService->searchByTitle($anime->title);
+    
             if (empty($kodikData)) {
                 $this->stats['skipped']++;
+                $this->warn("Not found in Kodik");
                 return;
             }
-
+    
+            $this->info("Found: " . ($kodikData[0]['title'] ?? 'unknown'));
+    
             $kodikId = $kodikData[0]['id'] ?? null;
             if (!$kodikId) {
                 $this->stats['skipped']++;
                 return;
             }
-
+    
             $episodes = $kodikService->getEpisodes($kodikId);
-
-            foreach ($episodes as $episodeData) {
-                $this->importEpisode($anime, $episodeData, $kodikData[0]);
+            $this->info("Episodes found: " . count($episodes));
+    
+            if (empty($episodes)) {
+                $this->stats['skipped']++;
+                return;
             }
-
+    
+            foreach ($episodes as $episodeData) {
+                try {
+                    $this->importEpisode($anime, $episodeData, $kodikData[0]);
+                } catch (\Exception $e) {
+                    $this->error("Episode error: " . $e->getMessage());
+                    $this->stats['errors']++;
+                }
+            }
+    
             if ($this->option('sync')) {
                 $this->syncEpisodes($anime, $episodes);
             }
-
+    
         } catch (\Exception $e) {
             $this->stats['errors']++;
-            $this->warn("Error processing anime {$anime->id}: {$e->getMessage()}");
+            $this->error("Error: " . $e->getMessage());
         }
     }
+    
 
     private function importEpisode(Anime $anime, array $episodeData, array $sourceData): void
     {
@@ -120,22 +135,26 @@ class ImportEpisodesCommand extends Command
 
         $existingEpisode = Episode::where('anime_id', $anime->id)
             ->where('episode_number', $episodeNumber)
-            ->where('translation_name', $translation['title'])
+            ->where('translator', $translation['title'])
             ->first();
 
         $data = [
             'anime_id' => $anime->id,
             'episode_number' => $episodeNumber,
+            'season_number' => $episodeData['season'] ?? 1,
             'title' => $episodeData['title'] ?? "Episode {$episodeNumber}",
-            'source' => 'kodik',
-            'source_id' => $sourceData['id'],
+            'player_url' => $episodeData['link'],
+            'player_iframe' => $episodeData['link'],
+            'translator' => $translation['title'],
             'translation_type' => $translation['type'],
-            'translation_name' => $translation['title'],
-            'translation_id' => $translation['id'],
             'quality' => $sourceData['quality'] ?? '720p',
-            'player_link' => $episodeData['link'],
-            'screenshot_url' => $sourceData['screenshots'][0] ?? null,
-            'duration_minutes' => null,
+            'source' => 'kodik',
+            'external_id' => $sourceData['id'],
+            'external_source' => 'kodik',
+            'thumbnail_url' => $sourceData['screenshots'][0] ?? null,
+            'poster_url' => $sourceData['screenshots'][0] ?? null,
+            'duration' => null,
+            'priority' => 1,
         ];
 
         if ($existingEpisode && $this->option('update')) {

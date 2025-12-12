@@ -34,7 +34,7 @@ class KodikService
                 $params['token'] = $this->apiToken;
             }
 
-            $response = Http::timeout(10)->get("{$this->baseUrl}/search", $params);
+            $response = Http::timeout(30)->get("{$this->baseUrl}/search", $params);
 
             if ($response->failed()) {
                 return [];
@@ -89,7 +89,7 @@ class KodikService
             $params['token'] = $this->apiToken;
         }
 
-        $response = Http::timeout(10)->get("{$this->baseUrl}/search", $params);
+        $response = Http::timeout(30)->get("{$this->baseUrl}/search", $params);
 
         if ($response->failed()) {
             return [];
@@ -103,19 +103,41 @@ class KodikService
         $params = [
             'title' => $title,
             'with_episodes' => true,
+            'with_material_data' => true,
             'limit' => 10,
+            'types' => 'anime-serial,anime',
         ];
 
         if ($this->apiToken) {
             $params['token'] = $this->apiToken;
         }
 
-        $response = Http::timeout(10)->get("{$this->baseUrl}/search", $params);
+        $response = Http::timeout(30)->retry(2, 1000)->get("{$this->baseUrl}/search", $params);
 
         if ($response->failed()) {
             return [];
         }
 
-        return $response->json('results', []);
+        $results = $response->json('results', []);
+
+        usort($results, function($a, $b) {
+            $aEpisodes = $this->countEpisodes($a);
+            $bEpisodes = $this->countEpisodes($b);
+            return $bEpisodes <=> $aEpisodes;
+        });
+
+        return $results;
+    }
+
+    private function countEpisodes(array $anime): int
+    {
+        $count = 0;
+        $seasons = $anime['seasons'] ?? [];
+        
+        foreach ($seasons as $season) {
+            $count += count($season['episodes'] ?? []);
+        }
+        
+        return $count;
     }
 }
