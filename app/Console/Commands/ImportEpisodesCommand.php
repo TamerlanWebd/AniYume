@@ -2,140 +2,180 @@
 
 namespace App\Console\Commands;
 
-use App\Jobs\ImportEpisodesJob;
 use App\Models\Anime;
-use App\Models\ImportLog;
-use App\Services\KodikEpisodeImportService;
+use App\Models\Episode;
+use App\Services\KodikService;
 use Illuminate\Console\Command;
 
 class ImportEpisodesCommand extends Command
 {
-    protected $signature = 'import:episodes 
-                            {--initial : Run initial import (skip existing episodes)}
-                            {--update : Run update import (update existing episodes)}
-                            {--anime= : Import episodes for specific anime ID}
-                            {--sync : Run synchronously without queue}';
+    protected $signature = 'import:episodes
+                          {--anime= : Import episodes for specific anime ID}
+                          {--update : Update existing episodes}
+                          {--sync : Remove episodes that no longer exist in source}
+                          {--batch=100 : Number of anime to process in batch}
+                          {--offset=0 : Starting offset for batch processing}';
 
     protected $description = 'Import episodes from Kodik API';
 
-    public function handle(KodikEpisodeImportService $importService): int
+    private array $stats = [
+        'processed' => 0,
+        'created' => 0,
+        'updated' => 0,
+        'skipped' => 0,
+        'errors' => 0,
+    ];
+
+    public function handle(KodikService $kodikService): int
     {
-        $isInitialImport = $this->option('initial');
-        $isUpdate = $this->option('update');
-        $specificAnimeId = $this->option('anime');
-        $syncMode = $this->option('sync');
+        $startTime = microtime(true);
+        $this->info('Starting episodes import...');
 
-        if (!$isInitialImport && !$isUpdate) {
-            $this->error('You must specify either --initial or --update flag');
-            return self::FAILURE;
+        if ($animeId = $this->option('anime')) {
+            $this->importForSingleAnime($animeId, $kodikService);
+        } else {
+            $this->importForMultipleAnime($kodikService);
         }
 
-        if ($isInitialImport && $isUpdate) {
-            $this->error('You cannot use both --initial and --update flags');
-            return self::FAILURE;
-        }
-
-        $importType = $isInitialImport ? 'episodes_initial' : 'episodes_update';
-
-        $this->info("Starting {$importType} import...");
-
-        if ($specificAnimeId) {
-            return $this->importSpecificAnime((int) $specificAnimeId, $isInitialImport, $importService);
-        }
-
-        if ($syncMode) {
-            return $this->importSync($isInitialImport, $importService);
-        }
-
-        return $this->importAsync($isInitialImport);
+        $this->displayStats($startTime);
+        return Command::SUCCESS;
     }
 
-    protected function importSpecificAnime(int $animeId, bool $isInitialImport, KodikEpisodeImportService $importService): int
+    private function importForSingleAnime(int $animeId, KodikService $kodikService): void
     {
         $anime = Anime::find($animeId);
-
         if (!$anime) {
             $this->error("Anime with ID {$animeId} not found");
-            return self::FAILURE;
+            return;
         }
 
         $this->info("Importing episodes for: {$anime->title}");
-
-        $importLog = ImportLog::create([
-            'import_type' => $isInitialImport ? 'episodes_initial' : 'episodes_update',
-            'started_at' => now(),
-            'status' => 'running',
-        ]);
-
-        $importService->importEpisodesForAnime($anime, $isInitialImport, $importLog);
-
-        $importLog->update([
-            'finished_at' => now(),
-            'status' => 'completed',
-        ]);
-
-        $this->info('Import completed!');
-        $this->displayStats($importLog);
-
-        return self::SUCCESS;
+        $this->processAnime($anime, $kodikService);
     }
 
-    protected function importSync(bool $isInitialImport, KodikEpisodeImportService $importService): int
+    private function importForMultipleAnime(KodikService $kodikService): void
     {
-        $this->info('Running synchronous import...');
-        
-        $importLog = $importService->importAllEpisodes($isInitialImport);
+        $batch = (int) $this->option('batch');
+        $offset = (int) $this->option('offset');
 
-        $this->info('Import completed!');
-        $this->displayStats($importLog);
+        $query = Anime::query()
+            ->orderBy('id')
+            ->skip($offset)
+            ->take($batch);
 
-        return $importLog->status === 'completed' ? self::SUCCESS : self::FAILURE;
-    }
+        $totalAnime = $query->count();
+        $this->info("Processing {$totalAnime} anime (offset: {$offset}, batch: {$batch})");
 
-    protected function importAsync(bool $isInitialImport): int
-    {
-        $this->info('Dispatching import jobs to queue...');
+        $progressBar = $this->output->createProgressBar($totalAnime);
+        $progressBar->start();
 
-        $importLog = ImportLog::create([
-            'import_type' => $isInitialImport ? 'episodes_initial' : 'episodes_update',
-            'started_at' => now(),
-            'status' => 'running',
-        ]);
-
-        $anime = Anime::all();
-        $totalAnime = $anime->count();
-
-        $bar = $this->output->createProgressBar($totalAnime);
-        $bar->start();
-
-        foreach ($anime as $animeItem) {
-            ImportEpisodesJob::dispatch($animeItem->id, $isInitialImport, $importLog->id);
-            $bar->advance();
+        foreach ($query->cursor() as $anime) {
+            $this->processAnime($anime, $kodikService);
+            $progressBar->advance();
+            
+            // Rate limiting: задержка между запросами
+            sleep(2);
         }
 
-        $bar->finish();
+        $progressBar->finish();
         $this->newLine(2);
-
-        $this->info("Dispatched {$totalAnime} jobs successfully!");
-        $this->info("Import Log ID: {$importLog->id}");
-        $this->info('Run "php artisan queue:work" to process the jobs');
-
-        return self::SUCCESS;
     }
 
-    protected function displayStats(ImportLog $importLog): void
+    private function processAnime(Anime $anime, KodikService $kodikService): void
     {
+        try {
+            $kodikData = $kodikService->searchByShikimoriId($anime->shikimori_id);
+
+            if (empty($kodikData)) {
+                $this->stats['skipped']++;
+                return;
+            }
+
+            $kodikId = $kodikData[0]['id'] ?? null;
+            if (!$kodikId) {
+                $this->stats['skipped']++;
+                return;
+            }
+
+            $episodes = $kodikService->getEpisodes($kodikId);
+
+            foreach ($episodes as $episodeData) {
+                $this->importEpisode($anime, $episodeData, $kodikData[0]);
+            }
+
+            if ($this->option('sync')) {
+                $this->syncEpisodes($anime, $episodes);
+            }
+
+        } catch (\Exception $e) {
+            $this->stats['errors']++;
+            $this->warn("Error processing anime {$anime->id}: {$e->getMessage()}");
+        }
+    }
+
+    private function importEpisode(Anime $anime, array $episodeData, array $sourceData): void
+    {
+        $episodeNumber = $episodeData['episode'];
+        $translation = $episodeData['translation'];
+
+        $existingEpisode = Episode::where('anime_id', $anime->id)
+            ->where('episode_number', $episodeNumber)
+            ->where('translation_name', $translation['title'])
+            ->first();
+
+        $data = [
+            'anime_id' => $anime->id,
+            'episode_number' => $episodeNumber,
+            'title' => $episodeData['title'] ?? "Episode {$episodeNumber}",
+            'source' => 'kodik',
+            'source_id' => $sourceData['id'],
+            'translation_type' => $translation['type'],
+            'translation_name' => $translation['title'],
+            'translation_id' => $translation['id'],
+            'quality' => $sourceData['quality'] ?? '720p',
+            'player_link' => $episodeData['link'],
+            'screenshot_url' => $sourceData['screenshots'][0] ?? null,
+            'duration_minutes' => null,
+        ];
+
+        if ($existingEpisode && $this->option('update')) {
+            $existingEpisode->update($data);
+            $this->stats['updated']++;
+        } elseif (!$existingEpisode) {
+            Episode::create($data);
+            $this->stats['created']++;
+        } else {
+            $this->stats['skipped']++;
+        }
+
+        $this->stats['processed']++;
+    }
+
+    private function syncEpisodes(Anime $anime, array $kodikEpisodes): void
+    {
+        $kodikEpisodeNumbers = collect($kodikEpisodes)->pluck('episode')->unique();
+        
+        Episode::where('anime_id', $anime->id)
+            ->where('source', 'kodik')
+            ->whereNotIn('episode_number', $kodikEpisodeNumbers)
+            ->delete();
+    }
+
+    private function displayStats(float $startTime): void
+    {
+        $duration = round(microtime(true) - $startTime, 2);
+        
+        $this->info('Import completed!');
         $this->newLine();
-        $this->info('Import Statistics:');
         $this->table(
             ['Metric', 'Value'],
             [
-                ['Total Processed', $importLog->total_processed],
-                ['Created', $importLog->total_created],
-                ['Updated', $importLog->total_updated],
-                ['Skipped', $importLog->total_skipped],
-                ['Status', $importLog->status],
-                ['Duration', $importLog->started_at->diffForHumans($importLog->finished_at, true)],
+                ['Total Processed', $this->stats['processed']],
+                ['Created', $this->stats['created']],
+                ['Updated', $this->stats['updated']],
+                ['Skipped', $this->stats['skipped']],
+                ['Errors', $this->stats['errors']],
+                ['Duration', $duration . ' seconds'],
             ]
         );
     }

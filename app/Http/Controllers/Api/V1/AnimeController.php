@@ -7,6 +7,8 @@ use App\Http\Resources\Api\V1\AnimeCollection;
 use App\Http\Resources\Api\V1\AnimeResource;
 use App\Models\Anime;
 use Illuminate\Http\Request;
+use App\Http\Resources\EpisodeResource;
+use App\Models\Episode;
 
 class AnimeController extends Controller
 {
@@ -63,4 +65,42 @@ class AnimeController extends Controller
 
         return new AnimeResource($anime);
     }
+    public function episodes(Anime $anime)
+    {
+        $episodes = $anime->episodes()
+            ->orderBy('episode_number')
+            ->orderBy('translation_name')
+            ->paginate(50);
+    
+        return EpisodeResource::collection($episodes);
+    }
+    
+    public function episode(Anime $anime, Episode $episode)
+    {
+        if ($episode->anime_id !== $anime->id) {
+            abort(404, 'Episode not found for this anime');
+        }
+    
+        return new EpisodeResource($episode);
+    }
+    
+    public function genres()
+    {
+        $genres = \App\Models\Genre::withCount('anime')
+            ->orderBy('name')
+            ->get();
+    
+        return response()->json($genres);
+    }
+    
+    public function studios()
+    {
+        $studios = \App\Models\Studio::withCount('anime')
+            ->orderBy('name')
+            ->get();
+    
+        return response()->json($studios);
+    }
+    
+
 }

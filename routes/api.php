@@ -15,7 +15,15 @@ Route::prefix('v1')->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('auth/me', [AuthController::class, 'me']);
     });
-
+    Route::prefix('v1')->group(function () {
+        Route::get('anime', [AnimeController::class, 'index']);
+        Route::get('anime/{anime}', [AnimeController::class, 'show']);
+        Route::get('anime/{anime}/episodes', [AnimeController::class, 'episodes']);
+        Route::get('anime/{anime}/episodes/{episode}', [AnimeController::class, 'episode']);
+        
+        Route::get('genres', [AnimeController::class, 'genres']);
+        Route::get('studios', [AnimeController::class, 'studios']);
+    });
     Route::get('anime', [AnimeController::class, 'index']);
     Route::get('anime/{slug}', [AnimeController::class, 'show']);
     

@@ -25,9 +25,12 @@ class Episode extends Model
         'thumbnail_url',
         'poster_url',
         'translator',
+        'translation_type',
         'quality',
         'source',
+        'priority',
     ];
+    
 
     protected $casts = [
         'aired_at' => 'datetime',

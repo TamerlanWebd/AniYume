@@ -8,6 +8,7 @@ use App\Models\Tag;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use App\Models\Episode;
 
 class AnimeManagementController extends Controller
 {
@@ -81,8 +82,14 @@ class AnimeManagementController extends Controller
     public function show(string $id)
     {
         $anime = Anime::with('tags')->findOrFail($id);
-        return view('admin.anime.show', compact('anime'));
+        $episodes = Episode::where('anime_id', $id)
+            ->orderBy('season_number')
+            ->orderBy('episode_number')
+            ->get();
+        
+        return view('admin.anime.show', compact('anime', 'episodes'));
     }
+    
 
     public function edit(string $id)
     {
