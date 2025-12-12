@@ -20,7 +20,6 @@ Route::prefix('v1')->group(function () {
     Route::get('anime/{slug}', [AnimeController::class, 'show']);
     
     Route::get('tags', [TagController::class, 'index']);
-
     Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
         Route::apiResource('anime', AdminAnimeController::class);
         
