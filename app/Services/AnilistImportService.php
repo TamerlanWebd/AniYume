@@ -211,7 +211,8 @@ class AnilistImportService
     {
         $title = $mediaData['title']['english'] ?? $mediaData['title']['romaji'] ?? 'Unknown';
         
-        $slug = Str::slug($title);
+        $baseSlug = Str::slug($title);
+        $slug = $this->generateUniqueSlug($baseSlug, $mediaData['id']);
         
         $rating = null;
         if (isset($mediaData['averageScore']) && $mediaData['averageScore'] > 0) {
@@ -242,6 +243,21 @@ class AnilistImportService
             'favorites' => $mediaData['favourites'] ?? null,
             'score_count' => null,
         ];
+    }
+
+    protected function generateUniqueSlug(string $baseSlug, string $externalId): string
+    {
+        $slug = $baseSlug;
+        $counter = 2;
+
+        while (Anime::where('slug', $slug)
+            ->where('external_id', '!=', $externalId)
+            ->exists()) {
+            $slug = $baseSlug . '-' . $counter;
+            $counter++;
+        }
+
+        return $slug;
     }
 
     protected function parseAnilistDate(?array $date): ?string
