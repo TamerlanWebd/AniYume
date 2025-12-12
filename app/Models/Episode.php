@@ -12,17 +12,26 @@ class Episode extends Model
     protected $fillable = [
         'anime_id',
         'episode_number',
+        'season_number',
         'title',
         'player_url',
+        'player_iframe',
         'external_id',
         'external_source',
+        'external_episode_id',
         'aired_at',
+        'release_date',
         'duration',
         'thumbnail_url',
+        'poster_url',
+        'translator',
+        'quality',
+        'source',
     ];
 
     protected $casts = [
         'aired_at' => 'datetime',
+        'release_date' => 'date',
     ];
 
     public function anime()

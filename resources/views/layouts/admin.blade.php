@@ -17,6 +17,7 @@
                         <a href="{{ route('admin.dashboard') }}" class="px-3 py-2 rounded hover:bg-indigo-700">Dashboard</a>
                         <a href="{{ route('admin.anime.index') }}" class="px-3 py-2 rounded hover:bg-indigo-700">Anime</a>
                         <a href="{{ route('admin.tags.index') }}" class="px-3 py-2 rounded hover:bg-indigo-700">Tags</a>
+                        <a href="{{ route('admin.episodes.index') }}" class="px-3 py-2 rounded hover:bg-indigo-700">Episodes</a>
                         <a href="{{ route('admin.import.index') }}" class="px-3 py-2 rounded hover:bg-indigo-700">Import</a>
                         <a href="{{ route('admin.audit-logs') }}" class="px-3 py-2 rounded hover:bg-indigo-700">Audit Logs</a>
                     </div>

@@ -18,6 +18,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::post('login', [AuthController::class, 'login'])->name('login.post');
     
     Route::middleware(['auth', 'admin'])->group(function () {
+        Route::prefix('episodes')->name('episodes.')->group(function () {
+            Route::get('/', [App\Http\Controllers\Admin\EpisodeManagementController::class, 'index'])->name('index');
+            Route::post('/import-all', [App\Http\Controllers\Admin\EpisodeManagementController::class, 'importAll'])->name('import-all');
+            Route::post('/{anime}/import', [App\Http\Controllers\Admin\EpisodeManagementController::class, 'importForAnime'])->name('import-for-anime');
+            Route::delete('/{id}', [App\Http\Controllers\Admin\EpisodeManagementController::class, 'destroy'])->name('destroy');
+        });
+        
         Route::post('logout', [AuthController::class, 'logout'])->name('logout');
         
         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
